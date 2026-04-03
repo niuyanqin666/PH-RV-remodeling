@@ -1,0 +1,17 @@
+# GSE186989 dataset (SuHx model)
+
+This file is NOT included in the repository due to GitHub file size limitations (>25MB).
+
+Please download from GEO:
+
+https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE186989
+
+Recommended file:
+
+* GSE186989_CTRL_vs._SU_HX_vs._Chrysin.xlsx
+
+After downloading, place the file into:
+data/
+
+So that the path becomes:
+data/GSE186989_CTRL_vs._SU_HX_vs._Chrysin.xlsx
