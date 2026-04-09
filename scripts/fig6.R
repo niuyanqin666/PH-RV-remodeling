@@ -6,6 +6,9 @@
 #   2) signature genes are read from:
 #        outputs/Fig5_outputs/Figure5_source_data.xlsx -> sheet "Consensus_genes"
 #   3) plotting style kept consistent with your previous code
+#   4) remove duplicated comparison Fig 4f
+#   5) reverse Fig 4e direction so it becomes:
+#        B-prePEA_septum vs B-prePEA_RV
 #
 # Output:
 #   outputs/Fig6_outputs/
@@ -57,8 +60,8 @@ if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
 # ------------------------------------------------
 # 1. Read consensus genes from Fig5 source data
 # ------------------------------------------------
-fig5_dir  <- file.path(output_root, "Fig5_outputs")
-fig5_file <- file.path(fig5_dir, "Figure5_source_data.xlsx")
+fig5_dir   <- file.path(output_root, "Fig5_outputs")
+fig5_file  <- file.path(fig5_dir, "Figure5_source_data.xlsx")
 fig5_sheet <- "Consensus_genes"
 
 if (!file.exists(fig5_file)) {
@@ -86,10 +89,11 @@ files <- list(
   Fig5 = file.path(raw_dir, "44161_2025_672_MOESM7_ESM.xlsx")
 )
 
+# 已删除重复的 Fig 4f
 sheets_map <- list(
   Fig2 = c("Fig 2c", "Fig 2d", "Fig 2e"),
   Fig3 = c("Fig 3c", "Fig 3d", "Fig 3e"),
-  Fig4 = c("Fig 4c", "Fig 4e", "Fig 4f"),
+  Fig4 = c("Fig 4c", "Fig 4e"),
   Fig5 = c("Fig 5c", "Fig 5d", "Fig 5e", "Fig 5f")
 )
 
@@ -102,6 +106,9 @@ for (nm in names(files)) {
 
 # ------------------------------------------------
 # 3. Contrast labels
+#    Fig 4e is displayed in reversed direction:
+#    original: B-prePEA_RV / B-prePEA_septum
+#    display : B-prePEA_septum vs B-prePEA_RV
 # ------------------------------------------------
 contrast_labels <- c(
   "Fig 2c" = "B-prePEAm_RV vs B-prePEAs_RV",
@@ -112,7 +119,6 @@ contrast_labels <- c(
   "Fig 3e" = "B-prePEAs_RV vs Control_RV",
   "Fig 4c" = "B-prePEA_septum vs Control_septum",
   "Fig 4e" = "B-prePEA_septum vs B-prePEA_RV",
-  "Fig 4f" = "B-prePEA_RV vs B-postPEA_septum",
   "Fig 5c" = "B-postPEA_septum vs B-prePEA_RV",
   "Fig 5d" = "B-postPEAm_septum vs B-prePEAm_RV",
   "Fig 5e" = "B-postPEAi_septum vs B-prePEAi_RV",
@@ -121,11 +127,14 @@ contrast_labels <- c(
 
 contrast_order <- unname(contrast_labels)
 
+# 需要翻转 log2FC 方向的 contrast
+reverse_contrasts <- c("Fig 4e")
+
 # ------------------------------------------------
 # 4. Helper: extract target genes from one sheet
 #    force priority to use Ensembl.gene if present
 # ------------------------------------------------
-extract_sig_genes_full <- function(df, contrast_name, signature_genes) {
+extract_sig_genes_full <- function(df, contrast_name, signature_genes, reverse_contrasts = NULL) {
   names(df) <- trimws(names(df))
   
   # 优先选择 Ensembl.gene；否则找 Gene / SYMBOL
@@ -177,11 +186,17 @@ extract_sig_genes_full <- function(df, contrast_name, signature_genes) {
     dplyr::slice(1) %>%
     dplyr::ungroup()
   
+  # 若需要按展示方向翻转 log2FC，则乘以 -1
+  if (!is.null(reverse_contrasts) && contrast_name %in% reverse_contrasts) {
+    df2 <- df2 %>%
+      dplyr::mutate(log2FoldChange = -log2FoldChange)
+  }
+  
   return(df2)
 }
 
 # ------------------------------------------------
-# 5. Traverse all 13 sheets
+# 5. Traverse all sheets
 # ------------------------------------------------
 all_sig_full <- list()
 
@@ -189,7 +204,12 @@ for (fig in names(files)) {
   for (sh in sheets_map[[fig]]) {
     cat("Reading:", fig, "-", sh, "\n")
     df <- read.xlsx(files[[fig]], sheet = sh)
-    subdf <- extract_sig_genes_full(df, sh, signature_genes)
+    subdf <- extract_sig_genes_full(
+      df = df,
+      contrast_name = sh,
+      signature_genes = signature_genes,
+      reverse_contrasts = reverse_contrasts
+    )
     all_sig_full[[paste(fig, sh, sep = ":")]] <- subdf
   }
 }
@@ -323,7 +343,6 @@ my_colors <- colorRampPalette(c("blue", "#ffff7f", "orange", "red"))(50)
 outfile_pdf <- file.path(outdir, "Fig6_43gene_heatmap_sigcount.pdf")
 outfile_png <- file.path(outdir, "Fig6_43gene_heatmap_sigcount.png")
 
-# 保持你原来的风格接近 6 x 6.5
 pdf(outfile_pdf, width = 6, height = 6.5)
 pheatmap(
   mat_scaled,
