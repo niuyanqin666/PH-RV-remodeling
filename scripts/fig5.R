@@ -1,16 +1,6 @@
-
-# ⚠️ NOTE:
-# GSE186989 file is not included in the repository due to size limitation.
-# Please download it from GEO and place it under:
-# data/GSE186989_CTRL_vs._SU_HX_vs._Chrysin.xlsx
-
-file.path(data_dir, "GSE186989_CTRL_vs._SU_HX_vs._Chrysin.xlsx")
-
-
 # ================================================================
-# Figure 5 — GSE266139-anchored RV-consensus ventricular remodeling module
-#   A. Bubble plot
-#   B. Structured annotation tile
+# Figure 5 — GSE266139-anchored conserved RV remodeling signature
+#   Final version: ONLY Fig5A bubble plot
 #
 # Selection rule:
 #   1) Gene must be significant in GSE266139_RV (anchor)
@@ -21,9 +11,18 @@ file.path(data_dir, "GSE186989_CTRL_vs._SU_HX_vs._Chrysin.xlsx")
 #   - abs(log2FC) >= 1
 #   - padj < 0.05
 #
-# Output style rule:
-#   - Figure5_AB is the reference format
-#   - A single-panel export should visually match AB as much as possible
+# Output:
+#   outputs/Fig5_outputs/
+#     - Figure5.pdf
+#     - Figure5.png
+#     - Fig5A_bubble.pdf
+#     - Fig5A_bubble.png
+#     - Figure5_source_data.xlsx
+#
+# ⚠️ NOTE:
+# GSE186989 file is not included in the repository due to size limitation.
+# Please download it from GEO and place it under:
+# data/raw/GSE186989_CTRL_vs._SU_HX_vs._Chrysin.xlsx
 # ================================================================
 
 suppressPackageStartupMessages({
@@ -40,7 +39,6 @@ suppressPackageStartupMessages({
   library(AnnotationDbi)
   library(org.Rn.eg.db)
   library(org.Hs.eg.db)
-  library(patchwork)
 })
 
 set.seed(1)
@@ -85,29 +83,13 @@ lfc_thr <- 1
 min_sig_other7 <- 5
 anchor_dataset_name <- "GSE266139_RV (Rat_MCT)"
 
-# fixed output size (kept from old version)
-figA_width  <- 8.6
-figB_width  <- 3.0
-figAB_width <- 11.6
-fig_height  <- 4
+fig_width  <- 8.8
+fig_height <- 7.8
 
 # ------------------------------------------------
 # 2. Theme
 # ------------------------------------------------
 theme_bubble <- function(base_size = 9) {
-  ggplot2::theme_bw(base_size = base_size) +
-    ggplot2::theme(
-      panel.grid = ggplot2::element_blank(),
-      axis.text = ggplot2::element_text(color = "black"),
-      axis.title = ggplot2::element_text(face = "bold", color = "black"),
-      plot.title = ggplot2::element_text(face = "bold", hjust = 0.5),
-      legend.title = ggplot2::element_text(face = "bold"),
-      legend.key = ggplot2::element_blank(),
-      plot.margin = margin(5.5, 5.5, 5.5, 5.5)
-    )
-}
-
-theme_tile <- function(base_size = 9) {
   ggplot2::theme_bw(base_size = base_size) +
     ggplot2::theme(
       panel.grid = ggplot2::element_blank(),
@@ -338,7 +320,10 @@ read_rv_266139 <- function(file) {
       Dataset = anchor_dataset_name
     ) %>%
     add_sig_col(alpha = alpha, lfc_thr = lfc_thr) %>%
-    dplyr::filter(!is.na(Gene), Gene != "")
+    dplyr::filter(!is.na(Gene), Gene != "") %>%
+    dplyr::group_by(Gene) %>%
+    dplyr::slice_max(order_by = abs(log2FC), n = 1, with_ties = FALSE) %>%
+    dplyr::ungroup()
 }
 
 # ------------------------------------------------
@@ -751,7 +736,7 @@ pA <- ggplot2::ggplot(plot_long, ggplot2::aes(x = Dataset, y = Gene)) +
     color = "Direction",
     shape = "External support",
     title = paste0(
-      "GSE266139-anchored genes: + >= ",
+      "GSE266139-anchored genes: >= ",
       min_sig_other7, "/7 same-direction support"
     )
   ) +
@@ -765,83 +750,32 @@ pA <- ggplot2::ggplot(plot_long, ggplot2::aes(x = Dataset, y = Gene)) +
   )
 
 # ------------------------------------------------
-# 14. Fig5B — Structured annotation tile
+# 14. Save figure
 # ------------------------------------------------
-annot_tile <- annot_support %>%
-  dplyr::left_join(
-    consensus_genes %>%
-      dplyr::select(Gene, anchor_dir, n_other7_sig_same),
-    by = "Gene"
-  ) %>%
-  dplyr::mutate(
-    Gene = factor(Gene, levels = rev(gene_order)),
-    ECM = ifelse(stringr::str_detect(Gene, "COL|FN1|POSTN|THBS|TIMP|LOX|LTBP|SPP1|CILP|TNC|MMP|LUM|DCN|BGN|VCAN|CTHRC1|FBLN|FBN|ADAMTS|SFRP|PRG4|PLOD"), 1, 0),
-    Immune = ifelse(stringr::str_detect(Gene, "CXCL|CCL|IL|TNF|SOCS|FCR|CLEC|CD|GPNMB|OLR1|PTX3|SERPINA|SLAMF|CRLF|INHBA|STC|MSR1|MRC1|SELE|SELPLG|CHI3L1|CH25H|S100A8|IL1RN"), 1, 0),
-    Adhesion = ifelse(stringr::str_detect(Gene, "ITG|VCL|ACTN|TAGLN|MYL|MYH|CNN|FLNA|FLNC|VASP|PXN|RHO|RAMP|EMB|FXYD|TMEM|SCN|ADRA|NCAM|MYBPC|PARVG|SHROOM|GJA3"), 1, 0),
-    Protein_support = ifelse(in_prot, 1, 0),
-    Olink_support = ifelse(in_olink, 1, 0)
-  ) %>%
-  dplyr::select(Gene, ECM, Immune, Adhesion, Protein_support, Olink_support) %>%
-  tidyr::pivot_longer(
-    cols = c(ECM, Immune, Adhesion, Protein_support, Olink_support),
-    names_to = "Category",
-    values_to = "Present"
-  ) %>%
-  dplyr::mutate(
-    Category = factor(
-      Category,
-      levels = c("ECM", "Immune", "Adhesion", "Protein_support", "Olink_support"),
-      labels = c("ECM", "Immune", "Adhesion", "Protein", "Olink")
-    )
-  )
-
-pB <- ggplot2::ggplot(annot_tile, ggplot2::aes(x = Category, y = Gene, fill = factor(Present))) +
-  ggplot2::geom_tile(color = "white") +
-  ggplot2::scale_fill_manual(values = c("0" = "grey90", "1" = "#2F5D8A"), name = "Present") +
-  ggplot2::labs(
-    x = NULL,
-    y = NULL,
-    title = "Annotation / external support"
-  ) +
-  theme_tile(base_size = 9) +
-  ggplot2::theme(
-    axis.text.x = ggplot2::element_text(angle = 25, hjust = 1, size = 8),
-    axis.text.y = ggplot2::element_text(size = 7.2),
-    legend.position = "right",
-    legend.text = ggplot2::element_text(size = 8),
-    legend.title = ggplot2::element_text(size = 8.5)
-  )
-
-# ------------------------------------------------
-# 15. Combine & save
-# ------------------------------------------------
-fig5 <- pA + pB + patchwork::plot_layout(widths = c(3.7, 1.35))
-
 ggplot2::ggsave(
-  file.path(out_dir, "Figure5_AB.pdf"),
-  fig5,
-  width = figAB_width - 2,
-  height = fig_height + 5,
+  file.path(out_dir, "Figure5.pdf"),
+  pA,
+  width = fig_width,
+  height = fig_height,
   units = "in",
   limitsize = FALSE
 )
 
 ggplot2::ggsave(
-  file.path(out_dir, "Figure5_AB.png"),
-  fig5,
-  width = figAB_width - 2,
-  height = fig_height + 5,
+  file.path(out_dir, "Figure5.png"),
+  pA,
+  width = fig_width,
+  height = fig_height,
   units = "in",
   dpi = 300,
   limitsize = FALSE
 )
 
-# Single-panel export
 ggplot2::ggsave(
   file.path(out_dir, "Fig5A_bubble.pdf"),
   pA,
-  width = figA_width - 3,
-  height = fig_height + 3,
+  width = fig_width,
+  height = fig_height,
   units = "in",
   limitsize = FALSE
 )
@@ -849,34 +783,15 @@ ggplot2::ggsave(
 ggplot2::ggsave(
   file.path(out_dir, "Fig5A_bubble.png"),
   pA,
-  width = figA_width - 3,
-  height = fig_height + 3,
-  units = "in",
-  dpi = 300,
-  limitsize = FALSE
-)
-
-ggplot2::ggsave(
-  file.path(out_dir, "Fig5B_annotation_tile.pdf"),
-  pB,
-  width = figB_width,
-  height = fig_height + 3,
-  units = "in",
-  limitsize = FALSE
-)
-
-ggplot2::ggsave(
-  file.path(out_dir, "Fig5B_annotation_tile.png"),
-  pB,
-  width = figB_width,
-  height = fig_height + 3,
+  width = fig_width,
+  height = fig_height,
   units = "in",
   dpi = 300,
   limitsize = FALSE
 )
 
 # ------------------------------------------------
-# 16. Export source data
+# 15. Export source data
 # ------------------------------------------------
 wb <- openxlsx::createWorkbook()
 
@@ -895,9 +810,6 @@ openxlsx::writeData(wb, "Consensus_genes", consensus_genes)
 openxlsx::addWorksheet(wb, "Fig5A_long")
 openxlsx::writeData(wb, "Fig5A_long", plot_long)
 
-openxlsx::addWorksheet(wb, "Fig5B_tile")
-openxlsx::writeData(wb, "Fig5B_tile", annot_tile)
-
 openxlsx::addWorksheet(wb, "Protein_support")
 openxlsx::writeData(wb, "Protein_support", data.frame(Gene = prot_sig_genes))
 
@@ -913,10 +825,8 @@ openxlsx::writeData(
       "lfc_thr",
       "anchor_dataset",
       "selection_rule",
-      "Figure5_AB_width",
-      "Figure5_AB_height",
-      "Fig5A_width",
-      "Fig5A_height"
+      "Figure5_width",
+      "Figure5_height"
     ),
     Value = c(
       alpha,
@@ -927,9 +837,7 @@ openxlsx::writeData(
         "), and in the other 7 datasets >= ", min_sig_other7,
         " must be significant with the same direction as anchor"
       ),
-      figAB_width,
-      fig_height,
-      figA_width,
+      fig_width,
       fig_height
     )
   )
@@ -945,4 +853,3 @@ openxlsx::saveWorkbook(
 )
 
 message("✅ Figure 5 finished. Outputs saved to: ", out_dir)
-
